@@ -1,0 +1,589 @@
+import streamlit as st
+import requests
+import os
+from deep_translator import GoogleTranslator
+from dotenv import load_dotenv
+
+# .env dosyasından environment değişkenlerini yükle
+load_dotenv()
+
+# API key'i .env dosyasından al, yoksa DEMO_KEY kullan
+API_KEY = os.getenv('API_KEY', 'DEMO_KEY')
+
+# NASA APOD API'den veri çeken fonksiyon
+def get_apod_data(date, api_key):
+    """
+    NASA APOD API'sinden belirli bir tarihe ait görseli ve bilgilerini getirir.
+    
+    Args:
+        date: Tarih objesi veya YYYY-MM-DD formatında string
+        api_key: NASA API anahtarı
+    
+    Returns:
+        dict: API'den dönen JSON verisi veya hata durumunda None
+    """
+    try:
+        # Tarihi YYYY-MM-DD formatına çevir
+        if hasattr(date, 'strftime'):
+            formatted_date = date.strftime('%Y-%m-%d')
+        else:
+            formatted_date = str(date)
+        
+        # NASA APOD endpoint
+        url = "https://api.nasa.gov/planetary/apod"
+        
+        # API parametreleri
+        params = {
+            'api_key': api_key,
+            'date': formatted_date
+        }
+        
+        # API'ye istek gönder
+        response = requests.get(url, params=params, timeout=10)
+        
+        # HTTP hata kontrolü
+        response.raise_for_status()
+        
+        # JSON verisini döndür
+        return response.json()
+        
+    except requests.exceptions.HTTPError as e:
+        st.error(f"❌ HTTP Hatası: {e}")
+        if response.status_code == 404:
+            st.warning("Bu tarih için veri bulunamadı.")
+        elif response.status_code == 403:
+            st.warning("API anahtarınız geçersiz. Lütfen .env dosyanızı kontrol edin.")
+        return None
+        
+    except requests.exceptions.Timeout:
+        st.error("⏱️ İstek zaman aşımına uğradı. Lütfen tekrar deneyin.")
+        return None
+        
+    except requests.exceptions.ConnectionError:
+        st.error("🔌 İnternet bağlantısı hatası. Lütfen bağlantınızı kontrol edin.")
+        return None
+        
+    except requests.exceptions.RequestException as e:
+        st.error(f"❌ Beklenmeyen bir hata oluştu: {e}")
+        return None
+        
+    except Exception as e:
+        st.error(f"⚠️ Genel hata: {e}")
+        return None
+
+# Sayfa yapılandırması
+st.set_page_config(
+    page_title="Doğum Gününde Evren",
+    page_icon="🌌",
+    layout="wide"
+)
+
+# Custom CSS - Cosmic Journey Theme
+st.markdown("""
+<style>
+    /* Dark space background */
+    .stApp {
+        background: linear-gradient(to bottom, #0a0e27 0%, #12182e 50%, #1a2332 100%);
+        background-attachment: fixed;
+        position: relative;
+        overflow-x: hidden;
+    }
+    
+    /* Particle rain effect - creating falling stars */
+    @keyframes fall {
+        0% {
+            transform: translateY(-100vh) translateX(0);
+            opacity: 0;
+        }
+        10% {
+            opacity: 1;
+        }
+        90% {
+            opacity: 1;
+        }
+        100% {
+            transform: translateY(100vh) translateX(-20px);
+            opacity: 0;
+        }
+    }
+    
+    @keyframes fall2 {
+        0% {
+            transform: translateY(-100vh) translateX(0);
+            opacity: 0;
+        }
+        15% {
+            opacity: 0.8;
+        }
+        85% {
+            opacity: 0.8;
+        }
+        100% {
+            transform: translateY(100vh) translateX(15px);
+            opacity: 0;
+        }
+    }
+    
+    @keyframes fall3 {
+        0% {
+            transform: translateY(-100vh) translateX(0);
+            opacity: 0;
+        }
+        20% {
+            opacity: 0.6;
+        }
+        80% {
+            opacity: 0.6;
+        }
+        100% {
+            transform: translateY(100vh) translateX(-10px);
+            opacity: 0;
+        }
+    }
+    
+    /* Create particles using pseudo-elements on the app container */
+    .stApp::before,
+    .stApp::after {
+        content: "";
+        position: fixed;
+        top: -100vh;
+        left: 0;
+        width: 100%;
+        height: 200vh;
+        pointer-events: none;
+        z-index: 1;
+        background-image: 
+            radial-gradient(2px 2px at 20% 30%, rgba(0, 212, 255, 0.8), transparent),
+            radial-gradient(2px 2px at 60% 70%, rgba(100, 200, 255, 0.6), transparent),
+            radial-gradient(1px 1px at 50% 50%, rgba(255, 255, 255, 0.8), transparent),
+            radial-gradient(1px 1px at 80% 10%, rgba(0, 212, 255, 0.7), transparent),
+            radial-gradient(2px 2px at 90% 60%, rgba(150, 220, 255, 0.5), transparent),
+            radial-gradient(1px 1px at 33% 80%, rgba(255, 255, 255, 0.6), transparent),
+            radial-gradient(1px 1px at 15% 90%, rgba(100, 200, 255, 0.7), transparent);
+        background-size: 200% 200%;
+        background-position: 0% 0%;
+        animation: fall 12s linear infinite;
+    }
+    
+    .stApp::after {
+        background-image: 
+            radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.7), transparent),
+            radial-gradient(2px 2px at 40% 60%, rgba(0, 212, 255, 0.5), transparent),
+            radial-gradient(1px 1px at 70% 40%, rgba(150, 220, 255, 0.8), transparent),
+            radial-gradient(2px 2px at 25% 75%, rgba(100, 200, 255, 0.6), transparent),
+            radial-gradient(1px 1px at 85% 85%, rgba(255, 255, 255, 0.5), transparent),
+            radial-gradient(1px 1px at 55% 15%, rgba(0, 212, 255, 0.7), transparent);
+        animation: fall2 15s linear infinite 3s;
+    }
+    
+    /* Static stars background */
+    .block-container::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        background-image: 
+            radial-gradient(1px 1px at 15% 15%, white, transparent),
+            radial-gradient(1px 1px at 45% 25%, rgba(255, 255, 255, 0.8), transparent),
+            radial-gradient(1px 1px at 75% 35%, white, transparent),
+            radial-gradient(1px 1px at 25% 55%, rgba(255, 255, 255, 0.6), transparent),
+            radial-gradient(1px 1px at 85% 65%, white, transparent),
+            radial-gradient(1px 1px at 55% 75%, rgba(255, 255, 255, 0.8), transparent),
+            radial-gradient(1px 1px at 35% 85%, white, transparent),
+            radial-gradient(1px 1px at 65% 95%, rgba(255, 255, 255, 0.7), transparent);
+        background-size: 100% 100%;
+        opacity: 0.6;
+    }
+    
+    /* Ensure content is above particles */
+    .block-container {
+        position: relative;
+        z-index: 10;
+        max-width: 1200px !important;
+        padding: 2rem 1rem !important;
+    }
+    
+    /* All text should be white with shadow */
+    .stApp, .stMarkdown, p, span, div, h2, h3, label {
+        color: #FFFFFF !important;
+        text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
+    }
+    
+    /* Hero title with gradient effect - "Journey Beyond The Cosmos" style */
+    h1 {
+        font-size: 5rem !important;
+        font-weight: 900 !important;
+        text-align: center !important;
+        margin-bottom: 1.5rem !important;
+        margin-top: 3rem !important;
+        line-height: 1.2 !important;
+        letter-spacing: -2px !important;
+    }
+    
+    /* Split text effect for gradient - applied via markdown */
+    .cosmic-title {
+        font-size: 5rem;
+        font-weight: 900;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        line-height: 1.2;
+        letter-spacing: -2px;
+    }
+    
+    .cosmic-title .highlight {
+        background: linear-gradient(90deg, #00d4ff 0%, #00e5ff 50%, #00ffd9 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.6));
+    }
+    
+    h2 {
+        font-size: 2.5rem !important;
+        font-weight: 700 !important;
+        text-align: center !important;
+    }
+    
+    h3 {
+        font-size: 2rem !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Welcome message styling */
+    .stMarkdown p {
+        font-size: 1.3rem !important;
+        text-align: center !important;
+        line-height: 1.8 !important;
+        color: rgba(255, 255, 255, 0.8) !important;
+    }
+    
+    /* Glowing planet/sphere effect */
+    @keyframes planet-glow {
+        0%, 100% {
+            box-shadow: 
+                0 0 40px rgba(0, 100, 255, 0.6),
+                0 0 80px rgba(0, 150, 255, 0.4),
+                0 0 120px rgba(0, 200, 255, 0.2),
+                inset 0 0 60px rgba(0, 150, 255, 0.3);
+        }
+        50% {
+            box-shadow: 
+                0 0 60px rgba(0, 120, 255, 0.8),
+                0 0 100px rgba(0, 180, 255, 0.5),
+                0 0 150px rgba(0, 220, 255, 0.3),
+                inset 0 0 80px rgba(0, 180, 255, 0.4);
+        }
+    }
+    
+    .cosmic-planet {
+        width: 300px;
+        height: 300px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, 
+            rgba(30, 60, 150, 0.8) 0%, 
+            rgba(15, 40, 100, 0.9) 40%, 
+            rgba(10, 25, 60, 1) 100%);
+        margin: 3rem auto;
+        animation: planet-glow 4s ease-in-out infinite;
+        border: 2px solid rgba(0, 150, 255, 0.3);
+        position: relative;
+    }
+    
+    /* Planet ring effect */
+    .cosmic-planet::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: -30px;
+        right: -30px;
+        height: 120px;
+        margin-top: -60px;
+        border-radius: 50%;
+        border: 3px solid rgba(0, 200, 255, 0.2);
+        transform: perspective(500px) rotateX(75deg);
+        box-shadow: 0 0 30px rgba(0, 200, 255, 0.3);
+    }
+    
+    /* Date input styling */
+    .stDateInput > div > div > input {
+        background-color: rgba(10, 20, 50, 0.6) !important;
+        border: 2px solid rgba(0, 212, 255, 0.4) !important;
+        border-radius: 12px !important;
+        color: white !important;
+        font-size: 1.1rem !important;
+        padding: 12px !important;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease !important;
+    }
+    
+    .stDateInput > div > div > input:hover {
+        border-color: rgba(0, 212, 255, 0.7) !important;
+        background-color: rgba(10, 20, 50, 0.8) !important;
+    }
+    
+    .stDateInput > label {
+        font-size: 1.4rem !important;
+        font-weight: 600 !important;
+        color: #00d4ff !important;
+        text-shadow: 0 0 10px rgba(0, 212, 255, 0.5) !important;
+    }
+    
+    /* Button styling - "Start Exploring" style */
+    .stButton > button {
+        background: linear-gradient(135deg, #00d4ff 0%, #0099ff 100%) !important;
+        color: white !important;
+        font-size: 1.4rem !important;
+        font-weight: 600 !important;
+        padding: 1rem 2.5rem !important;
+        border-radius: 50px !important;
+        border: none !important;
+        box-shadow: 
+            0 10px 30px rgba(0, 150, 255, 0.4),
+            0 0 20px rgba(0, 212, 255, 0.3) !important;
+        transition: all 0.3s ease !important;
+        text-shadow: none !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-3px) scale(1.02) !important;
+        box-shadow: 
+            0 15px 40px rgba(0, 150, 255, 0.6),
+            0 0 30px rgba(0, 212, 255, 0.5) !important;
+        background: linear-gradient(135deg, #00e5ff 0%, #00aaff 100%) !important;
+    }
+    
+    .stButton > button:active {
+        transform: translateY(-1px) scale(1.01) !important;
+    }
+    
+    /* Add arrow to button */
+    .stButton > button::after {
+        content: " →";
+        font-size: 1.6rem;
+        margin-left: 8px;
+        transition: margin-left 0.3s ease;
+    }
+    
+    .stButton > button:hover::after {
+        margin-left: 14px;
+    }
+    
+    /* Alert boxes with dark theme */
+    .stAlert {
+        background-color: rgba(10, 20, 40, 0.8) !important;
+        border-radius: 12px !important;
+        backdrop-filter: blur(15px) !important;
+        border: 1px solid rgba(0, 212, 255, 0.3) !important;
+    }
+    
+    .stSuccess, .stInfo, .stWarning, .stError {
+        background-color: rgba(10, 20, 40, 0.85) !important;
+        backdrop-filter: blur(15px) !important;
+        border-radius: 12px !important;
+        border-left: 4px solid rgba(0, 212, 255, 0.7) !important;
+    }
+    
+    /* Spinner */
+    .stSpinner > div {
+        border-top-color: #00d4ff !important;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background-color: rgba(10, 20, 40, 0.7) !important;
+        border-radius: 12px !important;
+        backdrop-filter: blur(10px) !important;
+        font-size: 1.2rem !important;
+        border: 1px solid rgba(0, 212, 255, 0.2) !important;
+    }
+    
+    .streamlit-expanderContent {
+        background-color: rgba(10, 20, 40, 0.5) !important;
+        backdrop-filter: blur(10px) !important;
+        border-radius: 0 0 12px 12px !important;
+    }
+    
+    /* Caption text */
+    .stCaptionContainer, small {
+        font-size: 1rem !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+    }
+    
+    /* Links */
+    a {
+        color: #00d4ff !important;
+        text-decoration: none !important;
+        font-weight: 600 !important;
+        text-shadow: 0 0 10px rgba(0, 212, 255, 0.4) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    a:hover {
+        color: #00e5ff !important;
+        text-decoration: underline !important;
+        text-shadow: 0 0 15px rgba(0, 212, 255, 0.6) !important;
+    }
+    
+    /* Images */
+    .stImage {
+        border-radius: 15px !important;
+        box-shadow: 
+            0 10px 40px rgba(0, 0, 0, 0.8),
+            0 0 20px rgba(0, 150, 255, 0.2) !important;
+        border: 2px solid rgba(0, 212, 255, 0.3) !important;
+    }
+    
+    /* Horizontal rule */
+    hr {
+        border-color: rgba(0, 212, 255, 0.3) !important;
+        margin: 2rem 0 !important;
+    }
+    
+    /* Video player */
+    video {
+        border-radius: 15px !important;
+        box-shadow: 
+            0 10px 40px rgba(0, 0, 0, 0.8),
+            0 0 20px rgba(0, 150, 255, 0.2) !important;
+        border: 2px solid rgba(0, 212, 255, 0.3) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# Hero section with cosmic title and glowing planet
+st.markdown("""
+<div style="text-align: center; margin: 3rem 0 2rem 0;">
+    <h1 style="
+        font-size: 5rem;
+        font-weight: 900;
+        line-height: 1.2;
+        letter-spacing: -2px;
+        margin-bottom: 1.5rem;
+        color: white;
+        text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9);
+    ">
+        🌌 Doğum Gününde <span style="
+            background: linear-gradient(90deg, #00d4ff 0%, #00e5ff 50%, #00ffd9 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.6));
+        ">Evren</span>
+    </h1>
+    
+    <div class="cosmic-planet"></div>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# Hoş geldiniz mesajı
+st.write("""
+NASA'nın Astronomy Picture of the Day (APOD) arşivinden doğum gününüzde çekilen 
+evren görüntüsünü keşfedin!
+""")
+
+# Tarih kısıtlamaları
+from datetime import datetime, date
+
+APOD_START_DATE = date(1995, 6, 16)  # NASA APOD başlangıç tarihi
+TODAY = date.today()
+
+# Tarih seçici
+st.subheader("📅 Tarih Seçin")
+selected_date = st.date_input(
+    "Doğum tarihinizi seçin:",
+    value=None,
+    min_value=APOD_START_DATE,
+    max_value=TODAY,
+    help=f"NASA APOD arşivi {APOD_START_DATE} tarihinden başlamaktadır."
+)
+
+# Evreni Göster butonu ve veri gösterimi
+if selected_date:
+    if st.button("🌌 Evreni Göster", type="primary", width="stretch"):
+        with st.spinner("🔭 Evrenin derinliklerinden veri çekiliyor..."):
+            # API'den veri çek
+            apod_data = get_apod_data(selected_date, API_KEY)
+            
+            if apod_data:
+                # Başarılı veri çekme
+                st.success("✨ Veriler başarıyla yüklendi!")
+                
+                # Çeviri için translator oluştur
+                try:
+                    translator = GoogleTranslator(source='en', target='tr')
+                    
+                    # Başlık ve açıklamayı çevir
+                    title_en = apod_data.get('title', 'Başlık Yok')
+                    explanation_en = apod_data.get('explanation', 'Açıklama Yok')
+                    
+                    # Çeviri yap
+                    title_tr = translator.translate(title_en)
+                    explanation_tr = translator.translate(explanation_en)
+                    
+                    # Başlığı göster
+                    st.markdown("---")
+                    st.title(f"🌟 {title_tr}")
+                    st.caption(f"Orijinal: {title_en}")
+                    st.caption(f"📅 Tarih: {apod_data.get('date', selected_date)}")
+                    
+                    # Medya tipine göre gösterim
+                    media_type = apod_data.get('media_type', 'image')
+                    
+                    if media_type == 'image':
+                        # Resim göster
+                        image_url = apod_data.get('url', '')
+                        if image_url:
+                            st.image(image_url, width="stretch")
+                            
+                            # HD görsel linki
+                            hdurl = apod_data.get('hdurl', '')
+                            if hdurl:
+                                st.markdown(f"🔗 [Yüksek Çözünürlüklü Görseli İndir]({hdurl})")
+                    
+                    elif media_type == 'video':
+                        # Video oynat
+                        video_url = apod_data.get('url', '')
+                        if video_url:
+                            st.video(video_url)
+                            st.info("🎥 Video içeriği gösteriliyor")
+                    
+                    # Açıklamayı göster
+                    st.markdown("---")
+                    st.subheader("📖 Açıklama")
+                    st.write(explanation_tr)
+                    
+                    # Orijinal açıklamayı expander içinde göster
+                    with st.expander("🔍 Orijinal Açıklamayı Göster (İngilizce)"):
+                        st.write(explanation_en)
+                    
+                    # Copyright bilgisi varsa göster
+                    if 'copyright' in apod_data:
+                        st.markdown("---")
+                        st.caption(f"© {apod_data['copyright']}")
+                
+                except Exception as e:
+                    st.error(f"❌ Çeviri hatası: {e}")
+                    st.info("Veriler orijinal haliyle gösteriliyor...")
+                    
+                    # Çeviri başarısız olursa orijinal verileri göster
+                    st.title(f"🌟 {apod_data.get('title', 'Başlık Yok')}")
+                    st.caption(f"📅 Tarih: {apod_data.get('date', selected_date)}")
+                    
+                    if apod_data.get('media_type') == 'image':
+                        st.image(apod_data.get('url', ''), width="stretch")
+                    elif apod_data.get('media_type') == 'video':
+                        st.video(apod_data.get('url', ''))
+                    
+                    st.write(apod_data.get('explanation', 'Açıklama Yok'))
+
+# Bilgilendirme
+st.markdown("---")
+st.caption("NASA APOD API kullanılarak oluşturulmuştur.")
